@@ -1,0 +1,488 @@
+/*
+ * readall.c:
+ *        The readall functions - getting a bit big, so split them out.
+ *        Copyright (c) 2012-2015 Gordon Henderson
+ ***********************************************************************
+ * This file is part of wiringPi:
+ *        https://projects.drogon.net/raspberry-pi/wiringpi/
+ *
+ *    wiringPi is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU Lesser General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
+ *
+ *    wiringPi is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU Lesser General Public License for more details.
+ *
+ *    You should have received a copy of the GNU Lesser General Public License
+ *    along with wiringPi.  If not, see <http://www.gnu.org/licenses/>.
+ ***********************************************************************
+ */
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <ctype.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#include <wiringPi.h>
+
+
+//#define YC_NTABLET
+
+
+
+extern int wpMode ;
+
+static const char *YeaCreatePinModeToString (int mode)
+{
+  if (mode == SERIAL)
+    return "SERL";
+  else if ( mode == PWM)
+    return "PWM";
+  else if ( mode == INPUT)
+    return "IN";
+  else if ( mode == OUTPUT)
+    return "OUT";
+  else if ( mode == CLKOUT)
+    return "CLK";
+  else if ( mode == CLK1_27M)
+    return "CLK";
+  else if ( mode == SPI)
+    return "SPI";
+  else if ( mode == I2C)
+    return "I2C";
+  else if ( mode == I2S)
+    return "I2S";
+  else
+    return " ";
+}
+
+/*
+ * doReadallExternal:
+ *        A relatively crude way to read the pins on an external device.
+ *        We don't know the input/output mode of pins, but we can tell
+ *        if it's an analog pin or a digital one...
+ *********************************************************************************
+ */
+
+static void doReadallExternal (void)
+{
+  int pin ;
+
+  printf ("+------+---------+--------+\n") ;
+  printf ("|  Pin | Digital | Analog |\n") ;
+  printf ("+------+---------+--------+\n") ;
+
+  for (pin = wiringPiNodes->pinBase ; pin <= wiringPiNodes->pinMax ; ++pin)
+    printf ("| %4d |  %4d   |  %4d  |\n", pin, digitalRead (pin), analogRead (pin)) ;
+
+  printf ("+------+---------+--------+\n") ;
+}
+
+
+/*
+ * doReadall:
+ *        Read all the GPIO pins
+ *        We also want to use this to read the state of pins on an externally
+ *        connected device, so we need to do some fiddling with the internal
+ *        wiringPi node structures - since the gpio command can only use
+ *        one external device at a time, we'll use that to our advantage...
+ *********************************************************************************
+ */
+
+static char *alts [] =
+{
+  "IN", "OUT", "ALT5", "ALT4", "ALT0", "ALT1", "ALT2", "ALT3"
+} ;
+ 
+#ifndef YC_NTABLET
+static int physToWpi [64] ={  //Ntablet
+   -1,                  //0
+   -1, -1,				//vcc 5V
+   -1, -1,				//3.3v , GND
+    8,  9,				//i2c1_sda,i2c1_scl
+   16, 15,				//uart1_rx, uart2_tx
+   -1, -1,  			//gnd,gnd
+   11, 10,				//spi2_csn1,spi2_csn0
+   14, 13,				//spi2_clk,spi2_rxd
+   12, 30,				//spi2_txd, GPIO07_B2
+   32, 31,				//ADC_IN0, PWM1,
+   -1, -1,				//UART2_TX,UART2_RX
+   -1, -1, -1, -1, -1,  //21          25
+   -1, -1, -1, -1, -1,  //26          30
+   -1, -1, -1, -1, -1,  //31          35
+   -1, -1, -1, -1, -1,  //36          40
+   -1, -1, -1, -1, -1,  //41          45
+   -1, -1, -1, -1, -1,  //46          50
+   -1, -1, -1, -1, -1,  //51          55
+   -1, -1, -1, -1, -1,  //56          60
+   -1, -1, -1           //60 63
+};
+
+static char *physNames [64][5] = {
+  {     NULL,     NULL,     NULL,     NULL,     NULL},                                                        //0
+  {"     5v","     5v","     5v","     5v","     5v"},    {"5v     ","5v     ","   5v  ","   5v  ","5v     "},//1,2
+  {"   3.3v","   3.3v","   3.3v","   3.3v","   3.3v"},	  {"GND    ","GND    ","GND    ","GND    ","GND    "},//3,4
+  {"GPIO8A4","  SDA.1","       ","       ","       "},    {"GPIO8A5","SCL.1  ","       ","       ","       "},//5,6
+  {"GPIO5B0","   RxD1","     TS","       ","       "},    {"GPIO5B1","TxD1   ","TS     ","       ","       "},//7,8
+  {"    GND","    GND","    GND","    GND","    GND"},    {"GND    ","GND    ","GND    ","GND    ","GND    "},//9,10
+  {"GPIO8A3","  CE1.2","	 SC","       ","       "},    {"GPIO8A7","CE0.2  ","SC     ","       ","       "},//11,12
+  {"GPIO8A6"," SCLK.2","       ","       ","       "},    {"GPIO8B0","MISO.2 ","SC     ","       ","       "},//13,14
+  {"GPIO8B1"," MOSI.2","     SC","       ","       "},    {"GPIO7B2","GPIO7B2","       ","       ","       "},//15,16
+  {"ADC_IN0","ADC_IN0","       ","       ","       "},    {"GPIO7A1","PWM.1  ","       ","       ","       "},//17,18
+  {"UART2TX","UART2TX","       ","       ","       "},    {"UART2RX","UART2RX","       ","       ","       "},//19,20
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},//21,22
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},//23,24
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},//   26
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},//  28
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 30
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 32
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 34
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 36
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 38
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 40
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 42
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 44
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 46
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 48
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 50
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 52
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 54
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 56
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 58
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 60
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},// 62
+  {     NULL,     NULL,     NULL,     NULL,     NULL}                                                         // 63
+
+};
+
+#else
+	
+static int physToWpi [64] =
+{
+  -1,           // 0
+  -1, -1,       // 1, 2
+   8, -1,
+   9, -1,
+   7, 15,
+  -1, 16,
+   0,  1,
+   2, -1,
+   3,  4,
+  -1,  5,
+  12, -1,
+  13,  6,
+  14, 10,
+  -1, 11,       // 25, 26
+  30, 31,        // Actually I2C, but not used
+  21, -1,
+  22, 26,
+  23, -1,
+  24, 27,
+  25, 28,
+  -1, 29,
+  -1, -1,
+  -1, -1,
+  -1, -1,
+  -1, -1,
+  -1, -1,
+  17, 18,
+  19, 20,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1
+} ;
+
+static char *physNames [64][5] =
+{
+  {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {"   3.3v","   3.3v","   3.3v","   3.3v","   3.3v"},    {"5v     ","5v     ","5v     ","5v     ","5v     "},//1,2
+  {"GPIO8A4","  SDA.1","       ","       ","       "},    {"5v     ","5v     ","5v     ","5v     ","5v     "},//3,4
+  {"GPIO8A5","  SCL.1","       ","       ","       "},    {"0v     ","0v     ","0v     ","0v     ","0v     "},//5,6
+  {"GPIO0C1"," CLKOUT","  CLKIN","       ","       "},    {"GPIO5B1","TxD.1  ","TS     ","       ","       "},//7,8
+  {"     0v","     0v","     0v","     0v","     0v"},    {"GPIO5B0","RxD.1  ","TS     ","       ","       "},//9,10
+  {"GPIO5B4"," SCLK.0","     TS"," CTSN.4","       "},    {"GPIO6A0","I2S_CLK","       ","       ","       "},//11,12
+  {"GPIO5B6"," MOSI.0","     TS","  TxD.4","       "},    {"0v     ","0v     ","0v     ","0v     ","0v     "},//13,14
+  {"GPIO5B7"," MISO.0","     TS","  RxD.4","       "},    {"GPIO5B2","CTSN.1 ","TS     ","       ","       "},//15,16
+  {"   3.3v","       ","       ","       ","       "},    {"GPIO5B3","RTSN.1 ","TS     ","       ","       "},//17,18
+  {"GPIO8B1"," MOSI.2","     SC","       ","       "},    {"0v     ","0v     ","0v     ","0v     ","0v     "},//19,20
+  {"GPIO8B0"," MISO.2","     SC","       ","       "},    {"GPIO5C3","TS     ","       ","       ","       "},//21,22
+  {"GPIO8A6"," SCLK.2","       ","       ","       "},    {"GPIO8A7","CE0.2  ","SC     ","       ","       "},//23,24
+  {"     0v","     0v","     0v","     0v","     0v"},    {"GPIO8A3","CE1.2  ","SC     ","       ","       "},//25,26
+  {"GPIO7C1","  SDA.4","       ","       ","       "},    {"GPIO7C2","SCL.4  ","       ","       ","       "},//27,28
+  {"GPIO5B5","  CE0.0","     TS"," RTSN.4","       "},    {"0v     ","0v     ","0v     ","0v     ","0v     "},//29.30
+  {"GPIO5C0","  CE1.0","     TS","       ","       "},    {"GPIO7C7","GPIO7C7","TxD.2  ","PWM.3  ","HDMI   "},//31,32
+  {"GPIO7C6","GPIO7C6","  RxD.2","  PWM.2","       "},    {"0v     ","0v     ","0v     ","0v     ","0v     "},//33,34
+  {"GPIO6A1"," I2S_FS","       ","       ","       "},    {"GPIO7A7","RxD.3  ","GPS_MAG","HSADCT ","       "},//35,36
+  {"GPIO7B0","  TxD.3","       ","       ","       "},    {"GPIO6A3","I2S_SDI","       ","       ","       "},//37,38
+  {"     0v","     0v","     0v","     0v","     0v"},    {"GPIO6A4","I2S_SDO","       ","       ","       "},//39,40
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {"GPIO.17","       ","       ","       ","       "},    {"GPIO.18","       ","       ","       ","       "},
+  {"GPIO.19","       ","       ","       ","       "},    {"GPIO.20","       ","       ","       ","       "},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL},    {     NULL,     NULL,     NULL,     NULL,     NULL},
+  {     NULL,     NULL,     NULL,     NULL,     NULL}
+} ;
+
+#endif
+
+int getAndTranslateAlt(int pin)
+{
+    int i ,ret;
+	i = YeaCreate_get_pinAlt (pin);
+	
+    switch(i)
+    {
+        case FSEL_OUTP://func 0
+            ret = 0;
+            break;
+        case FSEL_INPT://func 0
+            ret = 0;
+            break;
+        case FSEL_ALT0://func 1
+            ret = 0+1;
+            break;
+        case FSEL_ALT1://func 2
+            ret = 1+1;
+            break;
+        case FSEL_ALT2://func 3
+            ret = 2+1;
+            break;
+        case FSEL_ALT3://func 4
+            ret = 3+1;
+            break;
+        default:
+            ret = 0;
+            break;
+    }
+    return ret;
+}
+
+/*
+ * readallPhys:
+ *        Given a physical pin output the data on it and the next pin:
+ *| BCM | wPi |   Name  | Mode | Val| Physical |Val | Mode | Name    | wPi | BCM |
+ *********************************************************************************
+ */
+
+static void readallPhys (int physPin, int model)
+{
+  int pin;
+
+  if (physPinToGpio (physPin) == -1)
+    printf (" |     |    ") ;
+  else if (physPin == 17)
+	 printf (" | ADC | %3d", physToWpi [physPin]) ;
+  else
+    printf (" | %3d | %3d", physPinToGpio (physPin), physToWpi [physPin]) ;
+  printf (" | %s", physNames [physPin][getAndTranslateAlt(physPinToGpio (physPin))]) ;
+
+  if (physToWpi [physPin] == -1)
+    printf (" |      |  ") ;
+  else
+  {
+    /**/ if (wpMode == WPI_MODE_GPIO)
+      pin = physPinToGpio (physPin) ;
+    else if (wpMode == WPI_MODE_PHYS)
+      pin = physPin ;
+    else
+      pin = physToWpi [physPin] ;
+
+   if (model == PI_MODEL_TB || model == PI_MODEL_NT)
+		if (physPin == 17)
+			printf (" |   IN") ;
+		else
+			printf (" | %4s", YeaCreatePinModeToString(getPinMode (pin))) ;
+   else
+		if (physPin == 17)
+			printf (" |   IN") ;
+		else
+		printf (" | %4s", alts [getAlt (pin)]) ;
+  if (physPin == 17)
+		printf (" |  ") ;
+   else
+		printf (" | %d", digitalRead (pin)) ;
+  }
+
+// Pin numbers:
+
+  printf (" | %2d", physPin) ;
+  ++physPin ;
+  printf (" || %-2d", physPin) ;
+
+// Same, reversed
+
+  if (physToWpi [physPin] == -1)
+    printf (" |   |     ") ;
+  else
+  {
+    /**/ if (wpMode == WPI_MODE_GPIO)
+      pin = physPinToGpio (physPin) ;
+    else if (wpMode == WPI_MODE_PHYS)
+      pin = physPin ;
+    else
+      pin = physToWpi [physPin] ;
+
+   printf (" | %d", digitalRead (pin)) ;
+   //printf (" |     ") ;
+   if (model == PI_MODEL_TB || model == PI_MODEL_NT )
+     printf (" | %-4s", YeaCreatePinModeToString(getPinMode (pin))) ;
+   else
+     printf (" | %-4s", alts [getAlt (pin)]) ;
+  }
+  printf (" | %-5s", physNames [physPin][getAndTranslateAlt(physPinToGpio (physPin))]) ;
+
+  if (physToWpi[physPin] == -1)
+    printf (" |     |    ") ;
+  else
+        {
+        printf (" | %-3d | %-3d", physToWpi [physPin], physPinToGpio (physPin)) ;
+        }
+  printf (" |\n") ;
+}
+
+
+void cmReadall (void)
+{
+  int pin ;
+
+  printf ("+-----+------+-------+      +-----+------+-------+\n") ;
+  printf ("| Pin | Mode | Value |      | Pin | Mode | Value |\n") ;
+  printf ("+-----+------+-------+      +-----+------+-------+\n") ;
+
+  for (pin = 0 ; pin < 28 ; ++pin)
+  {
+    printf ("| %3d ", pin) ;
+   // printf ("| %-4s ", alts [getAlt (pin)]) ;
+    printf ("| %s  ", digitalRead (pin) == HIGH ? "High" : "Low ") ;
+    printf ("|      ") ;
+    printf ("| %3d ", pin + 28) ;
+  //  printf ("| %-4s ", alts [getAlt (pin + 28)]) ;
+    printf ("| %s  ", digitalRead (pin + 28) == HIGH ? "High" : "Low ") ;
+    printf ("|\n") ;
+  }
+
+  printf ("+-----+------+-------+      +-----+------+-------+\n") ;
+}
+
+
+/*
+ * abReadall:
+ *        Read all the pins on the model A or B.
+ *********************************************************************************
+ */
+
+void abReadall (int model, int rev)
+{
+  int pin ;
+  char *type ;
+
+  if (model == PI_MODEL_A)
+    type = " A" ;
+  else
+    if (rev == PI_VERSION_2)
+      type = "B2" ;
+    else
+      type = "B1" ;
+
+  printf (" +-----+-----+---------+------+---+-Model %s-+---+------+---------+-----+-----+\n", type) ;
+  printf (" | CPU | wPi |   Name  | Mode | V | Physical | V | Mode | Name    | wPi | CPU |\n") ;
+  printf (" +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+\n") ;
+  for (pin = 1 ; pin <= 26 ; pin += 2)
+    readallPhys (pin, model) ;
+
+  if (rev == PI_VERSION_2) // B version 2
+  {
+    printf (" +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+\n") ;
+    for (pin = 51 ; pin <= 54 ; pin += 2)
+      readallPhys (pin, model) ;
+  }
+
+  printf (" +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+\n") ;
+  printf (" | CPU | wPi |   Name  | Mode | V | Physical | V | Mode | Name    | wPi | CPU|\n") ;
+  printf (" +-----+-----+---------+------+---+-Model %s-+---+------+---------+-----+-----+\n", type) ;
+}
+
+
+/*
+ * piPlusReadall:
+ *        Read all the pins on the model A+ or the B+
+ *********************************************************************************
+ */
+
+static void plus2header (int model)
+{
+  /**/ if (model == PI_MODEL_AP)
+    printf (" +-----+-----+---------+------+---+--A Plus--+---+------+---------+-----+-----+\n") ;
+  else if (model == PI_MODEL_BP)
+    printf (" +-----+-----+---------+------+---+--B Plus--+---+------+---------+-----+-----+\n") ;
+  else if (model == PI_MODEL_ZERO)
+    printf (" +-----+-----+---------+------+---+-Pi Zero--+---+------+---------+-----+-----+\n") ;
+  else if (model == PI_MODEL_TB)
+    printf (" +-----+-----+---------+------+---+--Tinker--+---+------+---------+-----+-----+\n") ;
+  else if (model == PI_MODEL_NT) //Ntablet
+	printf (" +-----+-----+---------+------+---+--Ntablet--+---+------+---------+-----+-----+\n") ;
+  else
+    printf (" +-----+-----+---------+------+---+---Pi ----+---+------+---------+-----+-----+\n") ;
+}
+
+
+void piPlusReadall (int model)
+{
+  int pin ;
+
+  plus2header (model) ;
+
+  printf (" | CPU | wPi |   Name  | Mode | V | Physical | V | Mode | Name    | wPi | CPU |\n") ;
+  printf (" +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+\n") ;
+  if (model == PI_MODEL_NT){  //Ntablet
+	  for (pin = 1 ; pin <= 20 ; pin += 2)
+		  readallPhys (pin, model) ;
+  }else {
+	  for (pin = 1 ; pin <= 40 ; pin += 2)
+		  readallPhys (pin, model) ;
+  }
+
+  printf (" +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+\n") ;
+  printf (" | CPU | wPi |   Name  | Mode | V | Physical | V | Mode | Name    | wPi | CPU |\n") ;
+
+  plus2header (model) ;
+}
+
+
+void doReadall (void)
+{
+  int model, rev, mem, maker, overVolted ;
+
+  if (wiringPiNodes != NULL)        // External readall
+  {
+    doReadallExternal () ;
+    return ;
+  }
+
+  piBoardId (&model, &rev, &mem, &maker, &overVolted) ;
+
+  /**/ if ( (model == PI_MODEL_A) || (model == PI_MODEL_B))
+    abReadall (model, rev) ;
+  else if ( (model == PI_MODEL_BP) || (model == PI_MODEL_AP) ||
+			(model == PI_MODEL_2) || (model == PI_MODEL_ZERO)||
+			(model == PI_MODEL_TB) || (model == PI_MODEL_NT))
+    piPlusReadall (model) ;
+  else if (model == PI_MODEL_CM)
+    cmReadall () ;
+  else
+    printf ("Oops - unable to determine board type... model: %d\n", model) ;
+}
