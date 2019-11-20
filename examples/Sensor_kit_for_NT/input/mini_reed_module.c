@@ -1,27 +1,26 @@
 /*
 *
-* avoid_module.c
+*mini_reed_module.c
 *
 * Software written by YeaCreate Ltd 2019
 * All rights reserved
 *
 *
 ****************************
+*
 * Examples are for reference only
 *
 *
+*
 ------------------------------------
-  Ntablet_wPi   |      avoid       |
+  Ntablet_wPi   |     Mini_Reed    |
 ------------------------------------
-     GND        |       GND        |
+     GND        |         -        |
 ------------------------------------
-     3.3v       |       VCC        |
+     3.3v       |         +        |
 ------------------------------------
-     wPi_13     |       OUT        |
+     wPi_13     |         s        |
 ------------------------------------
-                |       EN         |
-------------------------------------
-
 
 *
 *
@@ -33,31 +32,30 @@
 #include <wiringPi.h>
 
 
-
-#define PIN	13
+#define R_PIN	13
 
 
 void init_GPIO(){
 
   wiringPiSetup () ;
 
-  pinMode ( PIN, INPUT);
+  pinMode ( R_PIN, INPUT);
 
 }
 
 void test(){
 
-  printf("[INFO]  Avoid State Read !\n");
+  printf("[INFO]  Mini_Reed State Read !\n");
   int val = 0;
 
 
   while( 1 ){
 
-     val = digitalRead( PIN );
+     val = digitalRead( R_PIN );
 
      printf("[INFO] val is :%d\n", val);
 
-     delay( 200 );
+     delay( 1000 );
 
   }//end while( 1 )
 

@@ -45,7 +45,6 @@ LDLIBS    = -lwiringPi -lwiringPiDev -lpthread -lm
 
 SRC	=	analog_hall_module.c		\
 		analog_temp_module.c		\
-		avoid_module.c				\
 		ball_switch_module.c		\
 		button_module.c				\
 		encoders_module.c			\
@@ -54,8 +53,18 @@ SRC	=	analog_hall_module.c		\
 		heart_beat_module.c			\
 		light_blocking_module.c		\
 		light_cup_module.c			\
-		liner_hell_module.c			
-		
+		liner_hell_module.c			\
+		mini_reed_module.c			\
+		photoresistor_module.c		\
+		small_sound_module.c		\
+		soil_humidity_sensor.c		\
+		tap_module.c				\
+		tilt_switch_module.c		\
+		touch_module.c				\
+		tracking_module.c			\
+		water_sensor_module.c		\
+		wave_distance.c
+	
 
 
 
@@ -78,10 +87,6 @@ analog_hall_module:	analog_hall_module.o
 analog_temp_module:	analog_temp_module.o
 	$Q echo [link]
 	$Q $(CC) -o $@ analog_temp_module.o $(LDFLAGS) $(LDLIBS)
-
-avoid_module:	avoid_module.o
-	$Q echo [link]
-	$Q $(CC) -o $@ avoid_module.o $(LDFLAGS) $(LDLIBS)
 	
 ball_switch_module:	ball_switch_module.o
 	$Q echo [link]
@@ -115,12 +120,51 @@ light_cup_module:	light_cup_module.o
 	$Q echo [link]
 	$Q $(CC) -o $@ light_cup_module.o $(LDFLAGS) $(LDLIBS)	
 	
-
 liner_hell_module:	liner_hell_module.o
 	$Q echo [link]
 	$Q $(CC) -o $@ liner_hell_module.o $(LDFLAGS) $(LDLIBS)	
 	
+mini_reed_module:	mini_reed_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ mini_reed_module.o $(LDFLAGS) $(LDLIBS)
 
+photoresistor_module:	photoresistor_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ photoresistor_module.o $(LDFLAGS) $(LDLIBS)
+	
+small_sound_module:	small_sound_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ small_sound_module.o $(LDFLAGS) $(LDLIBS)
+	
+soil_humidity_sensor:	soil_humidity_sensor.o
+	$Q echo [link]
+	$Q $(CC) -o $@ soil_humidity_sensor.o $(LDFLAGS) $(LDLIBS)
+	
+tap_module:	tap_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ tap_module.o $(LDFLAGS) $(LDLIBS)	
+
+tilt_switch_module:	tilt_switch_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ tilt_switch_module.o $(LDFLAGS) $(LDLIBS)	
+
+touch_module:	touch_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ touch_module.o $(LDFLAGS) $(LDLIBS)	
+	
+	
+tracking_module:	tracking_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ tracking_module.o $(LDFLAGS) $(LDLIBS)
+	
+water_sensor_module:	water_sensor_module.o
+	$Q echo [link]
+	$Q $(CC) -o $@ water_sensor_module.o $(LDFLAGS) $(LDLIBS)	
+
+wave_distance:	wave_distance.o
+	$Q echo [link]
+	$Q $(CC) -o $@ wave_distance.o $(LDFLAGS) $(LDLIBS)
+	
 .c.o:
 	$Q echo [CC] $<
 	$Q $(CC) -c $(CFLAGS) $< -o $@
