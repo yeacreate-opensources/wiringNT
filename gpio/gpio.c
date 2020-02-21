@@ -74,7 +74,8 @@ char *usage = "Usage: gpio -v\n"
               "       gpio pwmc <divider> \n"
               "       gpio load spi/i2c\n"
               "       gpio unload spi/i2c\n"
-              "       gpio i2cd/i2cdetect\n";
+              "       gpio i2cd/i2cdetect\n"
+              "       gpio readadc\n";
         //      "       gpio usbp high/low\n"
         //      "       gpio gbr <channel>\n"
           //    "       gpio gbw <channel> <value>" ;        // No trailing newline needed here.
@@ -307,6 +308,13 @@ static void doUnLoad (int argc, char *argv [])
 }
 
 
+static void doReadadc ()
+{
+	int adc_value = 0 ;
+    adc_value = YeaCreate_ReadADC0();
+	printf("%d\n", adc_value);
+	}
+
 /*
  * doI2Cdetect:
  *        Run the i2cdetect command with the right runes for this Pi revision
@@ -370,7 +378,7 @@ static void doExports (int argc, char *argv [])
 
     if ((l = read (fd, buf, 16)) == 0)
       sprintf (buf, "%s", "?") ;
- 
+
     buf [l] = 0 ;
     if ((buf [strlen (buf) - 1]) == '\n')
       buf [strlen (buf) - 1] = 0 ;
@@ -785,7 +793,7 @@ static void doUsbP (int argc, char *argv [])
     fprintf (stderr, "USB power contol is applicable to B+ boards only.\n") ;
     exit (1) ;
   }
-    
+
 // Need to force BCM_GPIO mode:
 
   wiringPiSetupGpio () ;
@@ -972,7 +980,7 @@ static void doWriteByte (int argc, char *argv [])
  *********************************************************************************
  */
 
-void doRead (int argc, char *argv []) 
+void doRead (int argc, char *argv [])
 {
   int pin, val ;
 
@@ -995,7 +1003,7 @@ void doRead (int argc, char *argv [])
  *********************************************************************************
  */
 
-void doAread (int argc, char *argv []) 
+void doAread (int argc, char *argv [])
 {
   if (argc != 3)
   {
@@ -1184,18 +1192,18 @@ static void doVersion (char *argv [])
   if(model == PI_MODEL_NT)
   {
         printf ("Ntablet Details:\n") ;
-            printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n", 
+            printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n",
         piModelNames [model], piRevisionNames [rev], piMemorySize [mem], piMakerNames [maker], warranty ? "[Out of Warranty]" : "") ;
   }else if(model == PI_MODEL_TB)
   {
         printf ("TinkerBoard Details:\n") ;
-            printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n", 
+            printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n",
         piModelNames [model], piRevisionNames [rev], piMemorySize [mem], piMakerNames [maker], warranty ? "[Out of Warranty]" : "") ;
-        
+
   }else//if(model == PI_MODEL_TB)
   {
     printf ("Raspberry Pi Details:\n") ;
-    printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n", 
+    printf ("  Type: %s, Revision: %s, Memory: %dMB, Maker: %s %s\n",
         piModelNames [model], piRevisionNames [rev], piMemorySize [mem], piMakerNames [maker], warranty ? "[Out of Warranty]" : "") ;
 
 // Check for device tree
@@ -1210,7 +1218,7 @@ static void doVersion (char *argv [])
     }
     else
       printf ("  * Root or sudo required for GPIO access.\n") ;
-    
+
   }
 }
 
@@ -1382,6 +1390,7 @@ int main (int argc, char *argv [])
   else if (strcasecmp (argv [1], "pwm"    ) == 0) doPwm       (argc, argv) ;
   else if (strcasecmp (argv [1], "awrite" ) == 0) doAwrite    (argc, argv) ;
   else if (strcasecmp (argv [1], "aread"  ) == 0) doAread     (argc, argv) ;
+  else if (strcasecmp (argv [1], "readadc"  ) == 0) doReadadc   () ;
 
 // GPIO Nicies
 
